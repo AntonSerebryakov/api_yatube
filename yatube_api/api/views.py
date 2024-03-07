@@ -8,14 +8,14 @@ from posts.models import Post, Group, Comment
 
 from api.serializers import PostSerializer, GroupSerializer, CommentSerializer
 
-from api.permissions import AuthorOrReadOnly
+from api.permissions import IsAuthorOrReadOnly
 
 
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [AuthorOrReadOnly, permissions.IsAuthenticated]
+    permission_classes = [IsAuthorOrReadOnly, permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -29,8 +29,8 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def api_comment(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
     if request.method == 'POST':
-        post = get_object_or_404(Post, id=post_id)
         data = request.data
         serializer = CommentSerializer(data=data)
         if serializer.is_valid():
@@ -38,7 +38,7 @@ def api_comment(request, post_id):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    comments = Comment.objects.filter(post__pk=post_id)
+    comments = post.comments.all()
     serializer = CommentSerializer(comments, many=True)
     return Response(serializer.data)
 
@@ -47,15 +47,13 @@ def api_comment(request, post_id):
 @permission_classes([permissions.IsAuthenticated])
 def api_comment_detail(request, post_id, comment_id):
     comment = get_object_or_404(Comment, id=comment_id)
-
     if request.method == 'GET':
         serializer = CommentSerializer(comment)
         return Response(serializer.data)
-
     if request.method == 'PUT' or request.method == 'PATCH':
-        if not AuthorOrReadOnly().has_object_permission(request,
-                                                        None,
-                                                        comment):
+        if not IsAuthorOrReadOnly().has_object_permission(request,
+                                                          None,
+                                                          comment):
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = CommentSerializer(comment,
                                        data=request.data,
@@ -66,9 +64,9 @@ def api_comment_detail(request, post_id, comment_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     if request.method == 'DELETE':
-        if not AuthorOrReadOnly().has_object_permission(request,
-                                                        None,
-                                                        comment):
+        if not IsAuthorOrReadOnly().has_object_permission(request,
+                                                          None,
+                                                          comment):
             return Response(status=status.HTTP_403_FORBIDDEN)
         comment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
